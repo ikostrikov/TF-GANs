@@ -21,7 +21,7 @@ class Generator(object):
             num_samples: number of samples to generate
             directory: a directory to save the images
         '''
-        imgs = self.sess.run(self.sampled_tensor)
+        imgs = self.sess.run(self.sampled_tensor, feed_dict={self.is_training:False})
         for k in range(imgs.shape[0]):
             imgs_folder = os.path.join(directory, 'imgs')
             if not os.path.exists(imgs_folder):

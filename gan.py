@@ -14,17 +14,19 @@ from utils import discriminator, decoder
 from generator import Generator
 
 def concat_elu(inputs):
-    return tf.nn.elu(tf.concat(3, [-inputs, inputs]))
+    return tf.nn.elu(tf.concat(axis=3, values=[-inputs, inputs]))
 
 class GAN(Generator):
 
     def __init__(self, hidden_size, batch_size, learning_rate):
         self.input_tensor = tf.placeholder(tf.float32, [None, 28 * 28])
+        self.is_training = tf.placeholder_with_default(True, [])
 
         with arg_scope([layers.conv2d, layers.conv2d_transpose],
                        activation_fn=concat_elu,
                        normalizer_fn=layers.batch_norm,
-                       normalizer_params={'scale': True}):
+                       normalizer_params={'scale': True,
+                                          'is_training': self.is_training}):
             with tf.variable_scope("model"):
                 D1 = discriminator(self.input_tensor)  # positive examples
                 D_params_num = len(tf.trainable_variables())
@@ -40,13 +42,18 @@ class GAN(Generator):
         params = tf.trainable_variables()
         D_params = params[:D_params_num]
         G_params = params[D_params_num:]
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        g_update_ops = [op for op in update_ops if op.name.startswith('model_1/')]
+        d_update_ops = [op for op in update_ops if op not in g_update_ops]
         #    train_discrimator = optimizer.minimize(loss=D_loss, var_list=D_params)
         # train_generator = optimizer.minimize(loss=G_loss, var_list=G_params)
         global_step = tf.contrib.framework.get_or_create_global_step()
-        self.train_discrimator = layers.optimize_loss(
-            D_loss, global_step, learning_rate / 10, 'Adam', variables=D_params, update_ops=[])
-        self.train_generator = layers.optimize_loss(
-            G_loss, global_step, learning_rate, 'Adam', variables=G_params, update_ops=[])
+        with tf.control_dependencies(d_update_ops):
+          self.train_discrimator = layers.optimize_loss(
+              D_loss, global_step, learning_rate / 10, 'Adam', variables=D_params, update_ops=[])
+        with tf.control_dependencies(g_update_ops):
+          self.train_generator = layers.optimize_loss(
+              G_loss, global_step, learning_rate, 'Adam', variables=G_params, update_ops=[])
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())

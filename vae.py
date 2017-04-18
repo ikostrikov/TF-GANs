@@ -19,11 +19,13 @@ class VAE(Generator):
     def __init__(self, hidden_size, batch_size, learning_rate):
         self.input_tensor = tf.placeholder(
             tf.float32, [None, 28 * 28])
+        self.is_training = tf.placeholder_with_default(True, [])
 
         with arg_scope([layers.conv2d, layers.conv2d_transpose],
                        activation_fn=tf.nn.elu,
                        normalizer_fn=layers.batch_norm,
-                       normalizer_params={'scale': True}):
+                       normalizer_params={'scale': True,
+                                          'is_training': self.is_training}):
             with tf.variable_scope("model") as scope:
                 encoded = encoder(self.input_tensor, hidden_size * 2)
 
@@ -44,8 +46,10 @@ class VAE(Generator):
             output_tensor, self.input_tensor)
 
         loss = vae_loss + rec_loss
-        self.train = layers.optimize_loss(loss, tf.contrib.framework.get_or_create_global_step(
-        ), learning_rate=learning_rate, optimizer='Adam', update_ops=[])
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+          self.train = layers.optimize_loss(loss, tf.contrib.framework.get_or_create_global_step(
+          ), learning_rate=learning_rate, optimizer='Adam', update_ops=[])
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
